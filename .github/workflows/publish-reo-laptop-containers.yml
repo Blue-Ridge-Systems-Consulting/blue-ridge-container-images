@@ -6,6 +6,7 @@ on:
       source_images:
         description: Comma-separated local source references (reo-ai, reo-tools, and/or olmoai)
         required: true
+        default: localhost/reo-ai:fedora44-20260915,localhost/reo-tools:fedora44-20260903,localhost/olmoai:fedora44
         type: string
       publish:
         description: Push the selected images to GHCR (leave unchecked to validate only)
