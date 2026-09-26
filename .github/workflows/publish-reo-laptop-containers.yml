@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           while IFS=$'\t' read -r name source image_id; do
-            echo "$source ($image_id) -> ghcr.io/blue-ridge-systems-consulting/$name:laptop-latest"
+            echo "$source ($image_id) -> ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
             echo "$source ($image_id) -> ghcr.io/blue-ridge-systems-consulting/$name:reo-laptop-${GITHUB_RUN_ID}"
           done < "$RUNNER_TEMP/images.tsv"
 
@@ -80,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           while IFS=$'\t' read -r name source image_id; do
-            stable="ghcr.io/blue-ridge-systems-consulting/$name:laptop-latest"
+            stable="ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
             immutable="ghcr.io/blue-ridge-systems-consulting/$name:reo-laptop-${GITHUB_RUN_ID}"
             podman tag "$source" "$stable"
             podman tag "$source" "$immutable"
