@@ -1,0 +1,93 @@
+name: Publish Reo Laptop Containers
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_images:
+        description: Comma-separated local source references (reo-ai, reo-tools, and/or olmoai)
+        required: true
+        type: string
+      publish:
+        description: Push the selected images to GHCR (leave unchecked to validate only)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: publish-reo-laptop-containers
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Publish selected Reo Laptop images
+    runs-on: [self-hosted, Linux, X64, blue-ridge-container-images-reo-laptop]
+    timeout-minutes: 45
+
+    steps:
+      - name: Validate selected local images
+        id: images
+        shell: bash
+        env:
+          SOURCE_IMAGES: ${{ inputs.source_images }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a images <<< "$SOURCE_IMAGES"
+          ((${#images[@]} > 0)) || { echo 'No images were selected.' >&2; exit 1; }
+
+          : > "$RUNNER_TEMP/images.tsv"
+          declare -A seen=()
+          for source in "${images[@]}"; do
+            source="${source//[[:space:]]/}"
+            [[ "$source" =~ ^localhost/(reo-ai|reo-tools|olmoai):[A-Za-z0-9._-]+$ ]] || {
+              echo "Unsupported source image: $source" >&2
+              echo 'Only localhost/reo-ai, localhost/reo-tools, and localhost/olmoai are allowed.' >&2
+              exit 1
+            }
+            name="${BASH_REMATCH[1]}"
+            [[ -z "${seen[$name]:-}" ]] || { echo "Duplicate image: $name" >&2; exit 1; }
+            seen[$name]=1
+            podman image exists "$source" || { echo "Local image not found: $source" >&2; exit 1; }
+            image_id="$(podman image inspect --format '{{.Id}}' "$source")"
+            printf '%s\t%s\t%s\n' "$name" "$source" "$image_id" | tee -a "$RUNNER_TEMP/images.tsv"
+          done
+
+      - name: Show planned publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r name source image_id; do
+            echo "$source ($image_id) -> ghcr.io/blue-ridge-systems-consulting/$name:laptop-latest"
+            echo "$source ($image_id) -> ghcr.io/blue-ridge-systems-consulting/$name:reo-laptop-${GITHUB_RUN_ID}"
+          done < "$RUNNER_TEMP/images.tsv"
+
+      - name: Log in to GitHub Container Registry
+        if: ${{ inputs.publish }}
+        shell: bash
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$GHCR_TOKEN" | podman login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Tag and publish selected images
+        if: ${{ inputs.publish }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r name source image_id; do
+            stable="ghcr.io/blue-ridge-systems-consulting/$name:laptop-latest"
+            immutable="ghcr.io/blue-ridge-systems-consulting/$name:reo-laptop-${GITHUB_RUN_ID}"
+            podman tag "$source" "$stable"
+            podman tag "$source" "$immutable"
+            podman push "$stable"
+            podman push "$immutable"
+          done < "$RUNNER_TEMP/images.tsv"
+
+      - name: Log out of GitHub Container Registry
+        if: ${{ always() && inputs.publish }}
+        shell: bash
+        run: podman logout ghcr.io || true
