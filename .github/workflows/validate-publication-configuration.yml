@@ -1,0 +1,25 @@
+name: Validate Container Publication Configuration
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - 'README.md'
+      - 'tests/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate publication configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate public publication configuration
+        run: bash tests/validate-publication-configuration.sh

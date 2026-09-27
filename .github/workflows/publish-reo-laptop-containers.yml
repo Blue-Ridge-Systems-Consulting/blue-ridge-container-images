@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       source_images:
-        description: Comma-separated local source references (reo-ai, reo-tools, and/or olmoai)
+        description: Comma-separated local source references (reo-ai, reo-tools, olmoai, and/or apertusai)
         required: true
-        default: localhost/reo-ai:fedora44-20260915,localhost/reo-tools:fedora44-20260903,localhost/olmoai:fedora44
+        default: localhost/reo-ai:fedora44-20260915,localhost/reo-tools:fedora44-20260903,localhost/olmoai:fedora44,localhost/apertusai:fedora44
         type: string
       publish:
         description: Push the selected images to GHCR (leave unchecked to validate only)
@@ -43,9 +43,9 @@ jobs:
           declare -A seen=()
           for source in "${images[@]}"; do
             source="${source//[[:space:]]/}"
-            [[ "$source" =~ ^localhost/(reo-ai|reo-tools|olmoai):[A-Za-z0-9._-]+$ ]] || {
+            [[ "$source" =~ ^localhost/(reo-ai|reo-tools|olmoai|apertusai):[A-Za-z0-9._-]+$ ]] || {
               echo "Unsupported source image: $source" >&2
-              echo 'Only localhost/reo-ai, localhost/reo-tools, and localhost/olmoai are allowed.' >&2
+              echo 'Only localhost/reo-ai, localhost/reo-tools, localhost/olmoai, and localhost/apertusai are allowed.' >&2
               exit 1
             }
             name="${BASH_REMATCH[1]}"
@@ -92,3 +92,12 @@ jobs:
         if: ${{ always() && inputs.publish }}
         shell: bash
         run: podman logout ghcr.io || true
+
+      - name: Verify anonymous public pulls
+        if: ${{ inputs.publish }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r name source image_id; do
+            podman pull --quiet --pull=always "ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
+          done < "$RUNNER_TEMP/images.tsv"

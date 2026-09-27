@@ -17,6 +17,7 @@ Each image uses the `blue-ridge-public` tag.
 | `reo-ai` | `podman pull ghcr.io/blue-ridge-systems-consulting/reo-ai:blue-ridge-public` |
 | `reo-tools` | `podman pull ghcr.io/blue-ridge-systems-consulting/reo-tools:blue-ridge-public` |
 | `olmoai` | `podman pull ghcr.io/blue-ridge-systems-consulting/olmoai:blue-ridge-public` |
+| `apertusai` | `podman pull ghcr.io/blue-ridge-systems-consulting/apertusai:blue-ridge-public` |
 
 The packages must be publicly visible on GitHub before anonymous pulls will succeed.
 
