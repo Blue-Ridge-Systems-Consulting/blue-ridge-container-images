@@ -99,5 +99,5 @@ jobs:
         run: |
           set -euo pipefail
           while IFS=$'\t' read -r name source image_id; do
-            podman pull --quiet --pull=always "ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
+            podman pull --quiet "ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
           done < "$RUNNER_TEMP/images.tsv"
