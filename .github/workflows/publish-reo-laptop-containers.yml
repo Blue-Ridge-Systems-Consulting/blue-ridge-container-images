@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       source_images:
-        description: Comma-separated local source references (reo-ai, reo-tools, olmoai, and/or apertusai)
+        description: Comma-separated local source references (reo-ai, ray-tools, olmoai, and/or apertusai; ray-tools publishes as reo-tools)
         required: true
-        default: localhost/reo-ai:fedora44-20260915,localhost/reo-tools:fedora44-20260903,localhost/olmoai:fedora44,localhost/apertusai:fedora44
+        default: localhost/reo-ai:fedora44-20260915,localhost/ray-tools:ui-parity-20261020
         type: string
       publish:
         description: Push the selected images to GHCR (leave unchecked to validate only)
@@ -43,12 +43,16 @@ jobs:
           declare -A seen=()
           for source in "${images[@]}"; do
             source="${source//[[:space:]]/}"
-            [[ "$source" =~ ^localhost/(reo-ai|reo-tools|olmoai|apertusai):[A-Za-z0-9._-]+$ ]] || {
+            [[ "$source" =~ ^localhost/(reo-ai|ray-tools|olmoai|apertusai):[A-Za-z0-9._-]+$ ]] || {
               echo "Unsupported source image: $source" >&2
-              echo 'Only localhost/reo-ai, localhost/reo-tools, localhost/olmoai, and localhost/apertusai are allowed.' >&2
+              echo 'Only localhost/reo-ai, localhost/ray-tools, localhost/olmoai, and localhost/apertusai are allowed.' >&2
               exit 1
             }
-            name="${BASH_REMATCH[1]}"
+            source_name="${BASH_REMATCH[1]}"
+            case "$source_name" in
+              ray-tools) name="reo-tools" ;;
+              *) name="$source_name" ;;
+            esac
             [[ -z "${seen[$name]:-}" ]] || { echo "Duplicate image: $name" >&2; exit 1; }
             seen[$name]=1
             podman image exists "$source" || { echo "Local image not found: $source" >&2; exit 1; }
