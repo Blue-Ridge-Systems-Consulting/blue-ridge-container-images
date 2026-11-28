@@ -25,10 +25,27 @@ concurrency:
 jobs:
   publish:
     name: Publish selected Reo Laptop images
-    runs-on: [self-hosted, Linux, X64, blue-ridge-container-images-reo-laptop]
+    runs-on: [self-hosted, Linux, X64, reo-fedora45-images]
     timeout-minutes: 45
 
     steps:
+      - name: Check out the image gateway client
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Prepare the scoped image gateway credential
+        shell: bash
+        env:
+          REO_IMAGE_HOST_SSH_KEY: ${{ secrets.REO_IMAGE_HOST_SSH_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$REO_IMAGE_HOST_SSH_KEY"
+          key_file="$(mktemp "$RUNNER_TEMP/reo-image-host.XXXXXXXX")"
+          printf '%s\n' "$REO_IMAGE_HOST_SSH_KEY" > "$key_file"
+          printf 'REO_IMAGE_HOST_KEY_FILE=%s\n' "$key_file" >> "$GITHUB_ENV"
+
       - name: Validate selected local images
         id: images
         shell: bash
@@ -55,8 +72,8 @@ jobs:
             esac
             [[ -z "${seen[$name]:-}" ]] || { echo "Duplicate image: $name" >&2; exit 1; }
             seen[$name]=1
-            podman image exists "$source" || { echo "Local image not found: $source" >&2; exit 1; }
-            image_id="$(podman image inspect --format '{{.Id}}' "$source")"
+            bash scripts/reo-image-host-podman.sh image exists "$source" || { echo "Local image not found: $source" >&2; exit 1; }
+            image_id="$(bash scripts/reo-image-host-podman.sh image inspect --format '{{.Id}}' "$source")"
             printf '%s\t%s\t%s\n' "$name" "$source" "$image_id" | tee -a "$RUNNER_TEMP/images.tsv"
           done
 
@@ -76,7 +93,7 @@ jobs:
           GHCR_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          printf '%s' "$GHCR_TOKEN" | podman login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          printf '%s' "$GHCR_TOKEN" | bash scripts/reo-image-host-podman.sh login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
 
       - name: Tag and publish selected images
         if: ${{ inputs.publish }}
@@ -86,16 +103,16 @@ jobs:
           while IFS=$'\t' read -r name source image_id; do
             stable="ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
             immutable="ghcr.io/blue-ridge-systems-consulting/$name:reo-laptop-${GITHUB_RUN_ID}"
-            podman tag "$source" "$stable"
-            podman tag "$source" "$immutable"
-            podman push "$stable"
-            podman push "$immutable"
+            bash scripts/reo-image-host-podman.sh tag "$source" "$stable"
+            bash scripts/reo-image-host-podman.sh tag "$source" "$immutable"
+            bash scripts/reo-image-host-podman.sh push "$stable"
+            bash scripts/reo-image-host-podman.sh push "$immutable"
           done < "$RUNNER_TEMP/images.tsv"
 
       - name: Log out of GitHub Container Registry
         if: ${{ always() && inputs.publish }}
         shell: bash
-        run: podman logout ghcr.io || true
+        run: bash scripts/reo-image-host-podman.sh logout ghcr.io || true
 
       - name: Verify anonymous public pulls
         if: ${{ inputs.publish }}
@@ -103,5 +120,13 @@ jobs:
         run: |
           set -euo pipefail
           while IFS=$'\t' read -r name source image_id; do
-            podman pull --quiet "ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
+            bash scripts/reo-image-host-podman.sh pull --quiet "ghcr.io/blue-ridge-systems-consulting/$name:blue-ridge-public"
           done < "$RUNNER_TEMP/images.tsv"
+
+      - name: Remove the temporary gateway credential
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          if [[ -n "${REO_IMAGE_HOST_KEY_FILE:-}" ]]; then
+            rm -f -- "$REO_IMAGE_HOST_KEY_FILE"
+          fi
